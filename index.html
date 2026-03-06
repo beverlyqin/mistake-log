@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mistake Log — LeetCode Interview Prep</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300;1,400&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    ::selection { background: #d4c5b0; }
+    body { background: linear-gradient(180deg, #f5f0ea 0%, #ede5d8 100%); min-height: 100vh; font-family: 'DM Sans', sans-serif; color: #4a3f35; }
+    input, textarea, select, button { font-family: 'DM Sans', sans-serif; }
+    textarea:focus, input:focus, select:focus { outline: none; border-color: #b8a898 !important; }
+    .entry-card { transition: all 0.3s cubic-bezier(0.2,0,0,1); }
+    .entry-card:hover { transform: translateY(-1px); box-shadow: 0 8px 32px rgba(120,100,80,0.1); }
+    .add-btn { transition: all 0.3s ease; }
+    .add-btn:hover { transform: scale(1.04); box-shadow: 0 6px 24px rgba(120,100,80,0.2); }
+    .tag { transition: all 0.2s ease; }
+    .tag:hover { transform: translateY(-1px); }
+    .delete-btn { transition: opacity 0.2s; }
+    .delete-btn:hover { opacity: 1 !important; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes pulse { 0%,100% { opacity:0.3; } 50% { opacity:0.8; } }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #d4c5b0; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    const TOPICS = ["Arrays","Strings","Hashmaps","Two Pointers","Sliding Window","Binary Search","Linked Lists","Stacks/Queues","Trees","Graphs","BFS","DFS","DP","Greedy","Backtracking","Sorting","Heap","Trie","Union Find"];
+    const DIFFICULTIES = ["Easy","Medium","Hard"];
+    const STATUSES = ["Solved","Needed hint","Couldn't solve","Partial"];
+
+    const TOPIC_COLORS = {
+      Arrays:"#e8d5b7",Strings:"#d5c4a1",Hashmaps:"#c9b99a",
+      "Two Pointers":"#b8c9aa","Sliding Window":"#a3b899","Binary Search":"#c4b5d0",
+      "Linked Lists":"#d1b8c4","Stacks/Queues":"#b8c4d1",Trees:"#8fbc8f",
+      Graphs:"#87a7b3",BFS:"#7eb5b0",DFS:"#6b9e98",DP:"#d4a07a",
+      Greedy:"#c9967a",Backtracking:"#b08ea2",Sorting:"#a8b4a0",
+      Heap:"#c2a8d1",Trie:"#9ab4c2","Union Find":"#b0a890"
+    };
+
+    const DIFF_COLORS = { Easy:"#6b9e6b", Medium:"#c9a84c", Hard:"#c75a5a" };
+    const STATUS_ICONS = { "Solved":"✓", "Needed hint":"◐", "Couldn't solve":"✗", "Partial":"◑" };
+
+    const STORAGE_KEY = "lc-mistake-log";
+
+    function loadEntries() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : [];
+      } catch { return []; }
+    }
+
+    function saveEntries(entries) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)); } catch {}
+    }
+
+    const initialEntry = () => ({
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+      date: new Date().toISOString().split("T")[0],
+      problem: "", topic: "DP", difficulty: "Medium", status: "Solved",
+      whatWentWrong: "", keyInsight: "", redoBy: "", redoDone: false, notes: ""
+    });
+
+    function MistakeLog() {
+      const [entries, setEntries] = useState(() => loadEntries());
+      const [view, setView] = useState("log");
+      const [adding, setAdding] = useState(false);
+      const [draft, setDraft] = useState(initialEntry());
+      const [expandedId, setExpandedId] = useState(null);
+      const [filter, setFilter] = useState({ topic: "All", difficulty: "All" });
+
+      useEffect(() => { saveEntries(entries); }, [entries]);
+
+      const addEntry = () => {
+        if (!draft.problem.trim()) return;
+        setEntries(prev => [draft, ...prev]);
+        setDraft(initialEntry());
+        setAdding(false);
+      };
+
+      const deleteEntry = (id) => setEntries(prev => prev.filter(e => e.id !== id));
+      const toggleRedo = (id) => setEntries(prev => prev.map(e => e.id === id ? {...e, redoDone: !e.redoDone} : e));
+
+      const filtered = entries.filter(e =>
+        (filter.topic === "All" || e.topic === filter.topic) &&
+        (filter.difficulty === "All" || e.difficulty === filter.difficulty)
+      );
+
+      const stats = {
+        total: entries.length,
+        byDifficulty: DIFFICULTIES.reduce((a, d) => ({ ...a, [d]: entries.filter(e => e.difficulty === d).length }), {}),
+        needsRedo: entries.filter(e => e.redoBy && !e.redoDone).length,
+        topMistakes: entries.reduce((a, e) => { if (e.topic) a[e.topic] = (a[e.topic]||0)+1; return a; }, {}),
+        solveRate: entries.length ? Math.round(entries.filter(e => e.status === "Solved").length / entries.length * 100) : 0
+      };
+
+      const sortedTopics = Object.entries(stats.topMistakes).sort((a,b) => b[1]-a[1]);
+
+      const exportData = () => {
+        const blob = new Blob([JSON.stringify(entries, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = "mistake-log-backup.json"; a.click();
+        URL.revokeObjectURL(url);
+      };
+
+      const importData = () => {
+        const input = document.createElement("input");
+        input.type = "file"; input.accept = ".json";
+        input.onchange = (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            try {
+              const data = JSON.parse(ev.target.result);
+              if (Array.isArray(data)) { setEntries(data); }
+            } catch { alert("Invalid file format"); }
+          };
+          reader.readAsText(file);
+        };
+        input.click();
+      };
+
+      return (
+        <div style={styles.root}>
+          {/* Header */}
+          <div style={styles.header}>
+            <div>
+              <h1 style={styles.title}>Mistake Log</h1>
+              <p style={styles.subtitle}>track patterns · build intuition · ace your interview</p>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+              <div style={{display:"flex",gap:6}}>
+                <button onClick={exportData} style={styles.utilBtn} title="Export data">↓ Export</button>
+                <button onClick={importData} style={styles.utilBtn} title="Import data">↑ Import</button>
+              </div>
+              <div style={styles.tabGroup}>
+                {["log","insights"].map(t => (
+                  <button key={t} onClick={() => setView(t)}
+                    style={{...styles.tab, ...(view===t ? styles.tabActive : {})}}>
+                    {t === "log" ? "Log" : "Insights"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {view === "log" ? (
+            <div style={styles.content}>
+              {/* Filters + Add */}
+              <div style={styles.toolbar}>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  <select value={filter.topic} onChange={e => setFilter(f => ({...f, topic:e.target.value}))}
+                    style={styles.filterSelect}>
+                    <option value="All">All topics</option>
+                    {TOPICS.map(t => <option key={t}>{t}</option>)}
+                  </select>
+                  <select value={filter.difficulty} onChange={e => setFilter(f => ({...f, difficulty:e.target.value}))}
+                    style={styles.filterSelect}>
+                    <option value="All">All levels</option>
+                    {DIFFICULTIES.map(d => <option key={d}>{d}</option>)}
+                  </select>
+                </div>
+                <button className="add-btn" onClick={() => setAdding(true)} style={styles.addBtn}>
+                  + New Entry
+                </button>
+              </div>
+
+              {/* Add Form */}
+              {adding && (
+                <div style={{...styles.card, animation:"fadeIn 0.3s ease", border:"1.5px solid #c9b99a", background:"#faf7f2"}}>
+                  <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:16}}>
+                    <input placeholder="Problem name *" value={draft.problem}
+                      onChange={e => setDraft(d => ({...d, problem:e.target.value}))}
+                      style={{...styles.input, flex:"2 1 200px", fontSize:16, fontWeight:500}} />
+                    <input type="date" value={draft.date}
+                      onChange={e => setDraft(d => ({...d, date:e.target.value}))}
+                      style={{...styles.input, flex:"0 0 150px"}} />
+                  </div>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
+                    <select value={draft.topic} onChange={e => setDraft(d => ({...d, topic:e.target.value}))} style={styles.selectInput}>
+                      {TOPICS.map(t => <option key={t}>{t}</option>)}
+                    </select>
+                    <select value={draft.difficulty} onChange={e => setDraft(d => ({...d, difficulty:e.target.value}))} style={styles.selectInput}>
+                      {DIFFICULTIES.map(d => <option key={d}>{d}</option>)}
+                    </select>
+                    <select value={draft.status} onChange={e => setDraft(d => ({...d, status:e.target.value}))} style={styles.selectInput}>
+                      {STATUSES.map(s => <option key={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <textarea placeholder="What went wrong?" value={draft.whatWentWrong}
+                    onChange={e => setDraft(d => ({...d, whatWentWrong:e.target.value}))}
+                    style={{...styles.textarea, marginBottom:10}} rows={2} />
+                  <textarea placeholder="Key insight or trick that made it click" value={draft.keyInsight}
+                    onChange={e => setDraft(d => ({...d, keyInsight:e.target.value}))}
+                    style={{...styles.textarea, marginBottom:10}} rows={2} />
+                  <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:16}}>
+                    <div style={{flex:1}}>
+                      <label style={styles.label}>Redo by</label>
+                      <input type="date" value={draft.redoBy}
+                        onChange={e => setDraft(d => ({...d, redoBy:e.target.value}))}
+                        style={styles.input} />
+                    </div>
+                    <div style={{flex:2}}>
+                      <label style={styles.label}>Notes (optional)</label>
+                      <input placeholder="Any extra notes..." value={draft.notes}
+                        onChange={e => setDraft(d => ({...d, notes:e.target.value}))}
+                        style={styles.input} />
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+                    <button onClick={() => {setAdding(false);setDraft(initialEntry())}} style={styles.cancelBtn}>Cancel</button>
+                    <button onClick={addEntry} style={{...styles.addBtn, opacity: draft.problem.trim() ? 1 : 0.5}}>Save Entry</button>
+                  </div>
+                </div>
+              )}
+
+              {/* Entries */}
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {filtered.length === 0 && !adding && (
+                  <div style={styles.emptyState}>
+                    <span style={{fontSize:40,marginBottom:12}}>📝</span>
+                    <p style={{fontFamily:"'Instrument Serif',serif",fontSize:20,color:"#8a7968"}}>No entries yet</p>
+                    <p style={{fontSize:13,color:"#b8a898",marginTop:4}}>Add your first mistake to start tracking patterns</p>
+                  </div>
+                )}
+                {filtered.map((entry, i) => {
+                  const expanded = expandedId === entry.id;
+                  const overdue = entry.redoBy && !entry.redoDone && new Date(entry.redoBy) < new Date();
+                  return (
+                    <div key={entry.id} className="entry-card"
+                      style={{...styles.card, animation:`fadeIn 0.3s ease ${i*0.03}s both`, cursor:"pointer",
+                        borderLeft:`3px solid ${DIFF_COLORS[entry.difficulty]||"#ccc"}`}}
+                      onClick={() => setExpandedId(expanded ? null : entry.id)}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                        <div style={{flex:1}}>
+                          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+                            <span style={{...styles.statusIcon, color: entry.status==="Solved" ? "#6b9e6b" : entry.status==="Couldn't solve" ? "#c75a5a" : "#c9a84c"}}>
+                              {STATUS_ICONS[entry.status]}
+                            </span>
+                            <span style={styles.problemName}>{entry.problem}</span>
+                          </div>
+                          <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+                            <span className="tag" style={{...styles.tag, background:TOPIC_COLORS[entry.topic]||"#ddd"}}>{entry.topic}</span>
+                            <span className="tag" style={{...styles.tag, background:"transparent", border:`1px solid ${DIFF_COLORS[entry.difficulty]}`, color:DIFF_COLORS[entry.difficulty]}}>
+                              {entry.difficulty}
+                            </span>
+                            {overdue && <span className="tag" style={{...styles.tag, background:"#f0d4d4", color:"#a05050"}}>overdue redo</span>}
+                            {entry.redoDone && <span className="tag" style={{...styles.tag, background:"#d4e8d4", color:"#507050"}}>redone ✓</span>}
+                          </div>
+                        </div>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <span style={styles.dateLabel}>{new Date(entry.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}</span>
+                          <span style={{fontSize:14,color:"#c9b99a",transform:expanded?"rotate(180deg)":"rotate(0)",transition:"transform 0.2s"}}>▾</span>
+                        </div>
+                      </div>
+
+                      {expanded && (
+                        <div style={{marginTop:14,paddingTop:14,borderTop:"1px solid #ece6dc",animation:"fadeIn 0.2s ease"}}
+                          onClick={e => e.stopPropagation()}>
+                          {entry.whatWentWrong && (
+                            <div style={styles.detailBlock}>
+                              <span style={styles.detailLabel}>What went wrong</span>
+                              <p style={styles.detailText}>{entry.whatWentWrong}</p>
+                            </div>
+                          )}
+                          {entry.keyInsight && (
+                            <div style={{...styles.detailBlock, background:"#f5f0e6", borderRadius:8, padding:"10px 14px", marginTop:8}}>
+                              <span style={{...styles.detailLabel, color:"#9a7d50"}}>💡 Key insight</span>
+                              <p style={styles.detailText}>{entry.keyInsight}</p>
+                            </div>
+                          )}
+                          {entry.notes && (
+                            <div style={{...styles.detailBlock, marginTop:8}}>
+                              <span style={styles.detailLabel}>Notes</span>
+                              <p style={styles.detailText}>{entry.notes}</p>
+                            </div>
+                          )}
+                          <div style={{display:"flex",gap:8,marginTop:12,justifyContent:"flex-end"}}>
+                            {entry.redoBy && !entry.redoDone && (
+                              <button onClick={() => toggleRedo(entry.id)} style={{...styles.smallBtn, background:"#d4e8d4", color:"#507050"}}>
+                                Mark redone
+                              </button>
+                            )}
+                            <button className="delete-btn" onClick={() => deleteEntry(entry.id)}
+                              style={{...styles.smallBtn, background:"#f0e0e0", color:"#a06060", opacity:0.6}}>
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            /* INSIGHTS VIEW */
+            <div style={{...styles.content, animation:"fadeIn 0.3s ease"}}>
+              {entries.length === 0 ? (
+                <div style={styles.emptyState}>
+                  <span style={{fontSize:40,marginBottom:12}}>📊</span>
+                  <p style={{fontFamily:"'Instrument Serif',serif",fontSize:20,color:"#8a7968"}}>No data yet</p>
+                  <p style={{fontSize:13,color:"#b8a898",marginTop:4}}>Log some mistakes to see your patterns</p>
+                </div>
+              ) : (
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(280px, 1fr))",gap:16}}>
+                  {/* Overview */}
+                  <div style={{...styles.card, gridColumn:"1 / -1"}}>
+                    <h3 style={styles.cardTitle}>Overview</h3>
+                    <div style={{display:"flex",gap:24,flexWrap:"wrap",marginTop:12}}>
+                      {[
+                        {label:"Total logged", value:stats.total, color:"#8a7968"},
+                        {label:"Solve rate", value:stats.solveRate+"%", color:stats.solveRate>=70?"#6b9e6b":"#c9a84c"},
+                        {label:"Needs redo", value:stats.needsRedo, color:stats.needsRedo>0?"#c75a5a":"#6b9e6b"},
+                      ].map(s => (
+                        <div key={s.label} style={{textAlign:"center",minWidth:80}}>
+                          <div style={{fontFamily:"'Instrument Serif',serif",fontSize:36,color:s.color,lineHeight:1}}>{s.value}</div>
+                          <div style={{fontSize:11,color:"#b8a898",marginTop:4,textTransform:"uppercase",letterSpacing:1}}>{s.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* By Difficulty */}
+                  <div style={styles.card}>
+                    <h3 style={styles.cardTitle}>By Difficulty</h3>
+                    <div style={{marginTop:12,display:"flex",flexDirection:"column",gap:10}}>
+                      {DIFFICULTIES.map(d => {
+                        const count = stats.byDifficulty[d];
+                        const pct = stats.total ? (count / stats.total * 100) : 0;
+                        return (
+                          <div key={d}>
+                            <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                              <span style={{fontSize:13,color:"#6b5d4f",fontWeight:500}}>{d}</span>
+                              <span style={{fontSize:12,color:"#b8a898"}}>{count}</span>
+                            </div>
+                            <div style={{height:6,background:"#ece6dc",borderRadius:3,overflow:"hidden"}}>
+                              <div style={{height:"100%",width:`${pct}%`,background:DIFF_COLORS[d],borderRadius:3,transition:"width 0.5s ease"}}/>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Weak spots */}
+                  <div style={styles.card}>
+                    <h3 style={styles.cardTitle}>Weak Spots</h3>
+                    <p style={{fontSize:11,color:"#b8a898",marginBottom:12}}>Topics you struggle with most</p>
+                    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                      {sortedTopics.slice(0,6).map(([topic, count], i) => (
+                        <div key={topic} style={{display:"flex",alignItems:"center",gap:10}}>
+                          <span style={{fontFamily:"'Instrument Serif',serif",fontSize:18,color:"#c9b99a",width:20,textAlign:"right"}}>{i+1}</span>
+                          <span className="tag" style={{...styles.tag, background:TOPIC_COLORS[topic]}}>{topic}</span>
+                          <span style={{fontSize:12,color:"#b8a898",marginLeft:"auto"}}>{count} mistake{count!==1?"s":""}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Upcoming redos */}
+                  <div style={{...styles.card, gridColumn:"1 / -1"}}>
+                    <h3 style={styles.cardTitle}>Upcoming Redos</h3>
+                    {entries.filter(e => e.redoBy && !e.redoDone).length === 0 ? (
+                      <p style={{fontSize:13,color:"#b8a898",marginTop:8}}>No pending redos — nice!</p>
+                    ) : (
+                      <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:6}}>
+                        {entries.filter(e => e.redoBy && !e.redoDone)
+                          .sort((a,b) => new Date(a.redoBy) - new Date(b.redoBy))
+                          .map(e => {
+                            const overdue = new Date(e.redoBy) < new Date();
+                            return (
+                              <div key={e.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:overdue?"#faf0f0":"#faf7f2",borderRadius:8,flexWrap:"wrap"}}>
+                                <span style={{fontSize:13,fontWeight:500,color:"#6b5d4f",flex:1,minWidth:120}}>{e.problem}</span>
+                                <span className="tag" style={{...styles.tag, background:TOPIC_COLORS[e.topic], fontSize:10}}>{e.topic}</span>
+                                <span style={{fontSize:12,color:overdue?"#c75a5a":"#8a7968"}}>
+                                  {new Date(e.redoBy+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+                                  {overdue && " (overdue)"}
+                                </span>
+                                <button onClick={() => toggleRedo(e.id)} style={{...styles.smallBtn, background:"#d4e8d4", color:"#507050", fontSize:11}}>
+                                  Done
+                                </button>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Footer */}
+          <div style={{textAlign:"center",marginTop:40,paddingTop:20,borderTop:"1px solid #ece6dc"}}>
+            <p style={{fontSize:11,color:"#c9b99a",letterSpacing:"0.04em"}}>data stored locally in your browser · nothing leaves your machine</p>
+          </div>
+        </div>
+      );
+    }
+
+    const styles = {
+      root: {
+        minHeight: "100vh",
+        fontFamily: "'DM Sans', sans-serif",
+        color: "#4a3f35",
+        padding: "32px 24px 60px",
+        maxWidth: 720,
+        margin: "0 auto",
+      },
+      header: {
+        display: "flex", justifyContent: "space-between", alignItems: "flex-end",
+        marginBottom: 28, flexWrap: "wrap", gap: 16,
+      },
+      title: {
+        fontFamily: "'Instrument Serif', Georgia, serif",
+        fontSize: 36, fontWeight: 400, color: "#3d342a", lineHeight: 1.1,
+        letterSpacing: "-0.02em",
+      },
+      subtitle: {
+        fontSize: 13, color: "#b8a898", marginTop: 4, letterSpacing: "0.04em",
+      },
+      tabGroup: {
+        display: "flex", background: "#ece6dc", borderRadius: 8, padding: 3,
+      },
+      tab: {
+        padding: "6px 16px", border: "none", background: "transparent",
+        borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 500,
+        color: "#8a7968", fontFamily: "'DM Sans',sans-serif",
+      },
+      tabActive: {
+        background: "#faf7f2", color: "#4a3f35",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+      },
+      utilBtn: {
+        padding: "5px 10px", border: "1px solid #ddd5c8", borderRadius: 6,
+        background: "#faf7f2", fontSize: 11, color: "#8a7968", cursor: "pointer",
+      },
+      content: { display: "flex", flexDirection: "column", gap: 12 },
+      toolbar: {
+        display: "flex", justifyContent: "space-between", alignItems: "center",
+        flexWrap: "wrap", gap: 10, marginBottom: 4,
+      },
+      filterSelect: {
+        padding: "6px 12px", border: "1px solid #ddd5c8", borderRadius: 6,
+        background: "#faf7f2", fontSize: 12, color: "#6b5d4f", cursor: "pointer",
+      },
+      addBtn: {
+        padding: "8px 20px", background: "#6b5d4f", color: "#faf7f2",
+        border: "none", borderRadius: 8, fontSize: 13, fontWeight: 500,
+        cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
+      },
+      cancelBtn: {
+        padding: "8px 20px", background: "transparent", color: "#8a7968",
+        border: "1px solid #ddd5c8", borderRadius: 8, fontSize: 13,
+        cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
+      },
+      card: {
+        background: "#faf7f2", borderRadius: 12, padding: "16px 20px",
+        border: "1px solid #ece6dc",
+      },
+      cardTitle: {
+        fontFamily: "'Instrument Serif', serif", fontSize: 20, fontWeight: 400,
+        color: "#3d342a",
+      },
+      problemName: { fontSize: 15, fontWeight: 500, color: "#3d342a" },
+      statusIcon: { fontSize: 16, fontWeight: 700, width: 20, textAlign: "center" },
+      tag: {
+        display: "inline-block", padding: "2px 10px", borderRadius: 20,
+        fontSize: 11, fontWeight: 500, color: "#5a4e42", letterSpacing: "0.01em",
+      },
+      dateLabel: { fontSize: 12, color: "#b8a898" },
+      detailBlock: { marginBottom: 4 },
+      detailLabel: {
+        fontSize: 11, fontWeight: 500, color: "#b8a898",
+        textTransform: "uppercase", letterSpacing: "0.06em",
+      },
+      detailText: { fontSize: 13, color: "#5a4e42", lineHeight: 1.5, marginTop: 2 },
+      input: {
+        padding: "8px 12px", border: "1px solid #ddd5c8", borderRadius: 8,
+        background: "#fff", fontSize: 13, color: "#4a3f35", width: "100%",
+      },
+      selectInput: {
+        padding: "8px 12px", border: "1px solid #ddd5c8", borderRadius: 8,
+        background: "#fff", fontSize: 13, color: "#4a3f35", cursor: "pointer",
+      },
+      textarea: {
+        width: "100%", padding: "10px 12px", border: "1px solid #ddd5c8",
+        borderRadius: 8, background: "#fff", fontSize: 13, color: "#4a3f35",
+        resize: "vertical", lineHeight: 1.5,
+      },
+      label: {
+        display: "block", fontSize: 11, color: "#b8a898", marginBottom: 4,
+        textTransform: "uppercase", letterSpacing: "0.06em",
+      },
+      smallBtn: {
+        padding: "4px 12px", border: "none", borderRadius: 6, fontSize: 12,
+        cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 500,
+      },
+      emptyState: {
+        display: "flex", flexDirection: "column", alignItems: "center",
+        justifyContent: "center", padding: "60px 20px", textAlign: "center",
+      },
+    };
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<MistakeLog />);
+  </script>
+</body>
+</html>
